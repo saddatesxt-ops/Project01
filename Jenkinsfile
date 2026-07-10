@@ -27,12 +27,23 @@ pipeline {
         }
 
         stage('Wstrzyknięcie konfiguracji .env z GUI') {
-            steps {
-                withCredentials([string(credentialsId: 'moj-plik-env', variable: 'ENV_CONTENT')]) {
-                    sh 'echo "$ENV_CONTENT" > Project/.env'
-                }
-            }
+    steps {
+        withCredentials([string(credentialsId: 'moj-plik-env', variable: 'ENV_CONTENT')]) {
+            sh '''
+                # 1. Tworzymy plik .env dokładnie z Twojego GUI
+                echo "$ENV_CONTENT" > Project/.env
+                
+                # 2. Usuwamy ukryte znaki \\r, które psują czytanie pliku w Linuxie
+                sed -i 's/\r//g' Project/.env
+                
+                # 3. Opcjonalnie: Usuwamy cudzysłowy, żeby python-dotenv nie przekazywał ich do API
+                sed -i 's/"//g' Project/.env
+                
+                echo "Plik .env został poprawnie sformatowany pod Linuxa."
+            '''
         }
+    }
+}
  
         stage('Uruchomienie skryptów z katalogu Project') {
             steps {
