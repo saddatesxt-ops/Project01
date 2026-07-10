@@ -1,10 +1,18 @@
 pipeline {
     agent {
         dockerfile {
-            // Jenkins sam znajdzie ten plik w pobranym z Gita kodzie i zbuduje kontener!
             filename 'Dockerfile.agent'
             args '--shm-size=2g -u 0'
         }
+    }
+
+    // DODAJEMY PARAMETR GUI: Pole tekstowe na ID produktu lub recenzję
+    parameters {
+        string(
+            name: 'CUSTOM_PRODUCT_ID', 
+            defaultValue: '', 
+            description: 'Wpisz ręcznie ID produktu/recenzję, aby nadpisać wartość z pliku .env. Zostaw puste, aby użyć domyślnej.'
+        )
     }
     
     stages {
@@ -12,10 +20,27 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: 'moj-plik-env', variable: 'ENV_FILE_PATH')]) {
                     sh '''
+                        # 1. Kopiujemy domyślny plik .env
                         cp "$ENV_FILE_PATH" Project/.env
                         sed -i 's/\r//g' Project/.env
                         sed -i 's/"//g' Project/.env
-                        echo "Plik .env został poprawnie zaimportowany."
+                        
+                        # 2. SPRAWDZAMY PARAMETR Z GUI JENKINSA:
+                        # Sprawdzamy, czy użytkownik wpisał coś w pole CUSTOM_PRODUCT_ID
+                        if [ ! -z "${CUSTOM_PRODUCT_ID}" ]; then
+                            echo "Wykryto ręczne nadpisanie z GUI: ${CUSTOM_PRODUCT_ID}"
+                            
+                            # Usuwamy starą zmienną (np. PRODUCT_ID), jeśli istniała w pliku .env
+                            sed -i '/^PRODUCT_ID=/d' Project/.env
+                            
+                            # Dopisujemy nową wartość podaną przez Ciebie w GUI
+                            echo "PRODUCT_ID=${CUSTOM_PRODUCT_ID}" >> Project/.env
+                            echo "Pomyślnie nadpisano PRODUCT_ID wartością z GUI."
+                        else
+                            echo "Pole GUI puste. Używam domyślnej konfiguracji z pliku .env."
+                        fi
+
+                        echo "Plik .env został poprawnie zaimportowany i przygotowany."
                     '''
                 }
             }
