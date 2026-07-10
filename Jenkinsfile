@@ -11,39 +11,77 @@ pipeline {
         stage('Instalacja zależności w agencie') {
             steps {
                 sh '''
-                    # Teraz jako root bez problemu zaktualizujesz pakiety
-                    apt-get update && apt-get install -y libgbm1 libnss3 libatk-bridge2.0-0 libgtk-3-0 libxshmfence1 libasound2
+                    # 1. Sprawdzanie i instalacja pakietów systemowych APT
+                    if dpkg -s libgbm1 libnss3 libatk-bridge2.0-0 libgtk-3-0 libxshmfence1 libasound2 >/dev/null 2>&1; then
+                        echo ">>> Pakiety systemowe APT są już zainstalowane."
+                    else
+                        echo ">>> Instalacja pakietów systemowych APT..."
+                        apt-get update && apt-get install -y libgbm1 libnss3 libatk-bridge2.0-0 libgtk-3-0 libxshmfence1 libasound2
+                    fi
                     
-                    # Instalacja bibliotek globalnie w kontenerze przejdzie gładko
+                    # 2. Aktualizacja pip, setuptools i wheel
                     pip install --upgrade pip setuptools wheel
-                    pip install playwright beautifulsoup4 python-dotenv nltk torch transformers spacy groq google-genai pandas matplotlib seaborn reportlab
                     
-                    # Pobranie modeli
-                    playwright install chromium
-                    python3 -m spacy download pl_core_news_md
-                    python3 -c "import nltk; nltk.download('punkt_tab', quiet=True)"
+                    # 3. Inteligentna instalacja bibliotek Pythona (tylko brakujące)
+                    REQUIRED_PKGS="playwright beautifulsoup4 python-dotenv nltk torch transformers spacy groq google-genai pandas matplotlib seaborn reportlab"
+                    INSTALL_LIST=""
+                    
+                    for pkg in $REQUIRED_PKGS; do
+                        if pip show $pkg >/dev/null 2>&1; then
+                            echo ">>> Biblioteka Pythona '$pkg' jest już zainstalowana."
+                        else
+                            INSTALL_LIST="$INSTALL_LIST $pkg"
+                        fi
+                    done
+                    
+                    if [ ! -z "$INSTALL_LIST" ]; then
+                        echo ">>> Instalacja brakujących bibliotek:$INSTALL_LIST"
+                        pip install $INSTALL_LIST
+                    fi
+                    
+                    # 4. Sprawdzanie i pobieranie modeli/przeglądarek
+                    if [ -d "/root/.cache/ms-playwright" ] && [ "$(ls -A /root/.cache/ms-playwright 2>/dev/null)" ]; then
+                        echo ">>> Playwright Chromium jest już zainstalowany."
+                    else
+                        echo ">>> Instalacja Playwright Chromium..."
+                        playwright install chromium
+                    fi
+                    
+                    if python3 -m spacy info pl_core_news_md >/dev/null 2>&1; then
+                        echo ">>> Model spaCy 'pl_core_news_md' jest już pobrany."
+                    else
+                        echo ">>> Pobieranie modelu spaCy 'pl_core_news_md'..."
+                        python3 -m spacy download pl_core_news_md
+                    fi
+                    
+                    if python3 -c "import os; import nltk; print(os.path.exists(os.path.expanduser('~/nltk_data/tokenizers/punkt_tab')))" 2>/dev/null | grep -q "True"; then
+                        echo ">>> Pakiet NLTK 'punkt_tab' jest już pobrany."
+                    else
+                        echo ">>> Pobieranie pakietu NLTK 'punkt_tab'..."
+                        python3 -c "import nltk; nltk.download('punkt_tab', quiet=True)"
+                    fi
                 '''
             }
         }
 
         stage('Wstrzyknięcie konfiguracji .env z GUI') {
-    steps {
-        withCredentials([string(credentialsId: 'moj-plik-env', variable: 'ENV_CONTENT')]) {
-            sh '''
-                # 1. Tworzymy plik .env dokładnie z Twojego GUI
-                echo "$ENV_CONTENT" > Project/.env
-                
-                # 2. Usuwamy ukryte znaki \\r, które psują czytanie pliku w Linuxie
-                sed -i 's/\r//g' Project/.env
-                
-                # 3. Opcjonalnie: Usuwamy cudzysłowy, żeby python-dotenv nie przekazywał ich do API
-                sed -i 's/"//g' Project/.env
-                
-                echo "Plik .env został poprawnie sformatowany pod Linuxa."
-            '''
+            steps {
+                withCredentials([string(credentialsId: 'moj-plik-env', variable: 'ENV_CONTENT')]) {
+                    sh '''
+                        # 1. Tworzymy plik .env dokładnie z Twojego GUI
+                        echo "$ENV_CONTENT" > Project/.env
+                        
+                        # 2. Usuwamy ukryte znaki \\r, które psują czytanie pliku w Linuxie
+                        sed -i 's/\r//g' Project/.env
+                        
+                        # 3. Opcjonalnie: Usuwamy cudzysłowy, żeby python-dotenv nie przekazywał ich do API
+                        sed -i 's/"//g' Project/.env
+                        
+                        echo "Plik .env został poprawnie sformatowany pod Linuxa."
+                    '''
+                }
+            }
         }
-    }
-}
  
         stage('Uruchomienie skryptów z katalogu Project') {
             steps {
