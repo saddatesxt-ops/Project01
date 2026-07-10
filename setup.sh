@@ -51,6 +51,13 @@ docker run -d \
   --restart unless-stopped \
   moj-custom-jenkins:latest
 
+echo "Czekam chwilę na zainicjalizowanie gniazda Dockera..."
+sleep 2
+
+# Uprawnienia dla dockera
+echo "Nadaję uprawnienia do gniazda Dockera dla Jenkinsa..."
+sudo chmod 666 /var/run/docker.sock
+
 echo "============================================="
 echo "   PROCES INICJALIZACJI ZAKOŃCZONY SUKCESEM  "
 echo "============================================="
