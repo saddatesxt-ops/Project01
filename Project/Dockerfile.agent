@@ -1,0 +1,37 @@
+FROM python:3.10-slim
+
+# 1. Instalacja zależności systemowych dla Playwright i bibliotek
+RUN apt-get update && apt-get install -y \
+    libgbm1 \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libxshmfence1 \
+    libasound2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Aktualizacja pip
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# 3. Instalacja wszystkich ciężkich bibliotek (w tym torch)
+RUN pip install --no-cache-dir \
+    playwright \
+    beautifulsoup4 \
+    python-dotenv \
+    nltk \
+    torch \
+    transformers \
+    spacy \
+    groq \
+    google-genai \
+    pandas \
+    matplotlib \
+    seaborn \
+    reportlab
+
+# 4. Pobieranie modeli i przeglądarek na stałe do wnętrza obrazu
+RUN playwright install chromium
+RUN python3 -m spacy download pl_core_news_md
+RUN python3 -c "import nltk; nltk.download('punkt_tab', quiet=True)"
+
+WORKDIR /workspace
