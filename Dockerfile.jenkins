@@ -14,5 +14,6 @@ RUN apt-get update && \
 # Powrót do użytkownika jenkins
 USER jenkins
 
-# AUTOMATYZACJA: Instalacja wtyczki Docker Pipeline podczas budowania obrazu
+# AUTOMATYZACJA: Instalacja wtyczki Docker Pipeline podczas budowania obrazu oraz Blueocean
 RUN jenkins-plugin-cli --plugins docker-workflow
+RUN jenkins-plugin-cli --plugins docker-workflow docker-plugin docker-commons blueocean
