@@ -2,8 +2,8 @@ pipeline {
     agent {
         docker {
             image 'python:3.10-slim'
-            // DODALIŚMY TUTAJ: -u 0 (uruchom jako użytkownik root)
-            args '--shm-size=2g -u 0'
+            // Przekazujemy zamapowane foldery z dysku VPS, aby zachować cache środowiska
+            args '--shm-size=2g -u 0 -v /var/jenkins_home/python_packages:/usr/local/lib/python3.10/site-packages -v /var/jenkins_home/ms-playwright:/root/.cache/ms-playwright -v /var/jenkins_home/nltk_data:/root/nltk_data'
         }
     }
     
@@ -11,24 +11,21 @@ pipeline {
         stage('Instalacja zależności w agencie') {
             steps {
                 sh '''
-                    # 1. Sprawdzanie i instalacja pakietów systemowych APT
+                    echo "=== SPRAWDZANIE ŚRODOWISKA ==="
                     if dpkg -s libgbm1 libnss3 libatk-bridge2.0-0 libgtk-3-0 libxshmfence1 libasound2 >/dev/null 2>&1; then
-                        echo ">>> Pakiety systemowe APT są już zainstalowane."
+                        echo ">>> [OK] Pakiety systemowe APT są już w systemie."
                     else
-                        echo ">>> Instalacja pakietów systemowych APT..."
+                        echo ">>> [BRAK] Instalacja pakietów systemowych APT..."
                         apt-get update && apt-get install -y libgbm1 libnss3 libatk-bridge2.0-0 libgtk-3-0 libxshmfence1 libasound2
                     fi
                     
-                    # 2. Aktualizacja pip, setuptools i wheel
                     pip install --upgrade pip setuptools wheel
                     
-                    # 3. Inteligentna instalacja bibliotek Pythona (tylko brakujące)
                     REQUIRED_PKGS="playwright beautifulsoup4 python-dotenv nltk torch transformers spacy groq google-genai pandas matplotlib seaborn reportlab"
                     INSTALL_LIST=""
-                    
                     for pkg in $REQUIRED_PKGS; do
                         if pip show $pkg >/dev/null 2>&1; then
-                            echo ">>> Biblioteka Pythona '$pkg' jest już zainstalowana."
+                            echo ">>> [OK] Biblioteka Pythona '$pkg' jest już zainstalowana."
                         else
                             INSTALL_LIST="$INSTALL_LIST $pkg"
                         fi
@@ -39,25 +36,21 @@ pipeline {
                         pip install $INSTALL_LIST
                     fi
                     
-                    # 4. Sprawdzanie i pobieranie modeli/przeglądarek
-                    if [ -d "/root/.cache/ms-playwright" ] && [ "$(ls -A /root/.cache/ms-playwright 2>/dev/null)" ]; then
-                        echo ">>> Playwright Chromium jest już zainstalowany."
+                    if [ -d "/root/.cache/ms-playwright/chromium-"* ]; then
+                        echo ">>> [OK] Playwright Chromium jest już pobrany."
                     else
-                        echo ">>> Instalacja Playwright Chromium..."
                         playwright install chromium
                     fi
                     
                     if python3 -m spacy info pl_core_news_md >/dev/null 2>&1; then
-                        echo ">>> Model spaCy 'pl_core_news_md' jest już pobrany."
+                        echo ">>> [OK] Model spaCy 'pl_core_news_md' jest już na dysku."
                     else
-                        echo ">>> Pobieranie modelu spaCy 'pl_core_news_md'..."
                         python3 -m spacy download pl_core_news_md
                     fi
                     
                     if python3 -c "import os; import nltk; print(os.path.exists(os.path.expanduser('~/nltk_data/tokenizers/punkt_tab')))" 2>/dev/null | grep -q "True"; then
-                        echo ">>> Pakiet NLTK 'punkt_tab' jest już pobrany."
+                        echo ">>> [OK] Pakiet NLTK 'punkt_tab' jest już na dysku."
                     else
-                        echo ">>> Pobieranie pakietu NLTK 'punkt_tab'..."
                         python3 -c "import nltk; nltk.download('punkt_tab', quiet=True)"
                     fi
                 '''
@@ -66,43 +59,55 @@ pipeline {
 
         stage('Wstrzyknięcie konfiguracji .env z GUI') {
             steps {
-                // ZMIANA: używamy 'file' zamiast 'string', ponieważ 'moj-plik-env' to Secret file
                 withCredentials([file(credentialsId: 'moj-plik-env', variable: 'ENV_FILE_PATH')]) {
                     sh '''
-                        # 1. Kopiujemy plik konfiguracyjny do katalogu Project jako .env
                         cp "$ENV_FILE_PATH" Project/.env
-                        
-                        # 2. Usuwamy ukryte znaki \\r, które psują czytanie pliku w Linuxie
                         sed -i 's/\r//g' Project/.env
-                        
-                        # 3. Usuwamy cudzysłowy, żeby python-dotenv nie przekazywał ich do API
                         sed -i 's/"//g' Project/.env
-                        
-                        echo "Plik .env został poprawnie zaimportowany i sformatowany."
+                        echo "Plik .env został poprawnie zaimportowany."
                     '''
                 }
             }
         }
- 
-        stage('Uruchomienie skryptów z katalogu Project') {
+
+        // --- ROZBICIE URUCHAMIANIA NA ODDZIELNE ETAPY (VISIBLE IN PIPELINE OVERVIEW) ---
+
+        stage('Krok 1: Scraping') {
             steps {
                 dir('Project') {
-                    sh '''
-                        echo "=== KROK 1: Scraping ==="
-                        python3 scrap_ceneo.py
-                        
-                        echo "=== KROK 2: Parsowanie HTML ==="
-                        python3 parser_html_ceneo.py
-                        
-                        echo "=== KROK 3: Encoder ==="
-                        python3 encoder_ceneo.py
-                        
-                        echo "=== KROK 4: Decoder ==="
-                        python3 decoder_ceneo.py
-                        
-                        echo "=== KROK 5: Raport ==="
-                        python3 generate_report_ceneo.py
-                    '''
+                    sh 'python3 scrap_ceneo.py'
+                }
+            }
+        }
+
+        stage('Krok 2: Parsowanie HTML') {
+            steps {
+                dir('Project') {
+                    sh 'python3 parser_html_ceneo.py'
+                }
+            }
+        }
+
+        stage('Krok 3: Encoder') {
+            steps {
+                dir('Project') {
+                    sh 'python3 encoder_ceneo.py'
+                }
+            }
+        }
+
+        stage('Krok 4: Decoder') {
+            steps {
+                dir('Project') {
+                    sh 'python3 decoder_ceneo.py'
+                }
+            }
+        }
+
+        stage('Krok 5: Raport') {
+            steps {
+                dir('Project') {
+                    sh 'python3 generate_report_ceneo.py'
                 }
             }
         }
