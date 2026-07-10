@@ -45,10 +45,10 @@ pipeline {
                         python3 parser_html_ceneo.py
                         
                         echo "=== KROK 3: Encoder ==="
-                        python3 api_ceneo_encoder.py
+                        python3 encoder_ceneo.py
                         
                         echo "=== KROK 4: Decoder ==="
-                        python3 api_ceneo_decoder.py
+                        python3 decoder_ceneo.py
                         
                         echo "=== KROK 5: Raport ==="
                         python3 generate_report_ceneo.py
