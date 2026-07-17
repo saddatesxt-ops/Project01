@@ -2,17 +2,15 @@ pipeline {
     agent {
         dockerfile {
             filename 'Dockerfile.agent'
-            // DODANO WOLUMEN MAPUJĄCY CACHE MODELI DO MASZYNY WIRTUALNEJ
-            args '--shm-size=2g -u 0 -v /var/data/huggingface_cache:/root/.cache/huggingface'
+            args '--shm-size=2g -u 0 -v /var/data/huggingface_cache:/workspace/Project/models'
         }
     }
 
-    //PARAMETR GUI: Pole tekstowe id_produktu do ręcznego wprowadzenia
     parameters {
         string(
             name: 'CUSTOM_PRODUCT_ID', 
             defaultValue: '', 
-            description: 'Wpisz ręcznie ID produktu/recenzję, aby nadpisać wartość z pliku .env. Zostaw puste, aby użyć domyślnej.'
+            description: 'Wpisz ręcznie ID produktu, aby nadpisać wartość z pliku .env. Zostaw puste, aby użyć domyślnej.'
         )
     }
     
