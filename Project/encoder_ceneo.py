@@ -33,7 +33,6 @@ os.makedirs(MODELS_CACHE_DIR, exist_ok=True)
 import torch
 import spacy
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-from transformers.utils import is_offline_mode
 
 # Funkcja pomocnicza tekstowa: Dzieli ciągły tekst opinii na pojedyncze zdania przy użyciu tokenizatora NLTK dla języka polskiego.
 def split_into_sentences(text):
@@ -120,15 +119,20 @@ def extract_aspects_from_sentence(nlp_engine, text):
                     aspects.append(lemma)
     return aspects
 
-# Zoptymalizowana funkcja ładowania modeli oparta o natywny mechanizm HF offline
+# Zoptymalizowana funkcja ładowania modeli oparta o weryfikację istnienia katalogu w wolumenie
 def load_local_or_remote_pipeline(task, model_name, cache_dir, device):
-    if os.environ.get("HF_HUB_OFFLINE") == "1" or is_offline_mode():
-        logging.info(f" -> [OFFLINE] Ładowanie modelu z lokalnego cache: {model_name}")
+    # Hugging Face automatycznie zamienia ukośniki na podwójne myślniki w nazwie folderu cache
+    hf_folder_format = f"models--{model_name.replace('/', '--')}"
+    expected_local_path = os.path.join(cache_dir, hf_folder_format)
+    
+    # Sprawdzamy, czy ten konkretny model został już pobrany do wolumenu
+    if os.path.exists(expected_local_path):
+        logging.info(f" -> [LOKALNY CACHE] Znaleziono model na dysku. Ładowanie bez odpytywania sieci: {model_name}")
         tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_name, cache_dir=cache_dir, local_files_only=True)
         return pipeline(task, model=model, tokenizer=tokenizer, device=device)
     else:
-        logging.warning(f" -> [ONLINE] Tryb sieciowy aktywowany. Pobieranie/Sprawdzanie {model_name}...")
+        logging.warning(f" -> [PIERWSZE URUCHOMIENIE] Brak modelu na dysku. Pobieranie z Hugging Face: {model_name}...")
         tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
         model = AutoModelForSequenceClassification.from_pretrained(model_name, cache_dir=cache_dir)
         return pipeline(task, model=model, tokenizer=tokenizer, device=device)
@@ -148,7 +152,6 @@ def analyze_reviews_encoder(product_id):
     
     device = 0 if torch.cuda.is_available() else -1
     logging.info(f"Używane urządzenie obliczeniowe: {'GPU (CUDA)' if device == 0 else 'CPU'}")
-    logging.info(f"Status trybu HuggingFace Offline: {os.environ.get('HF_HUB_OFFLINE') == '1'}")
 
     model_pairs = list(itertools.product(MODEL_SENTIMENT_VERSIONS, MODEL_EMOTION_VERSIONS))
     logging.info(f"Wykryte modele sentymentu: {len(MODEL_SENTIMENT_VERSIONS)}")
