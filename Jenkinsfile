@@ -8,7 +8,7 @@ pipeline {
 
     parameters {
         string(
-            name: 'CUSTOM_PRODUCT_ID', 
+            name: 'CENEO_PRODUCT_ID', 
             defaultValue: '', 
             description: 'Wpisz ręcznie ID produktu, aby nadpisać wartość z pliku .env. Zostaw puste, aby użyć domyślnej.'
         )
@@ -18,29 +18,31 @@ pipeline {
         stage('Wstrzyknięcie konfiguracji .env z GUI') {
             steps {
                 withCredentials([file(credentialsId: 'moj-plik-env', variable: 'ENV_FILE_PATH')]) {
-                    sh '''
-                        # 1. Kopiujemy domyślny plik .env
-                        cp "$ENV_FILE_PATH" Project/.env
-                        sed -i 's/\r//g' Project/.env
-                        sed -i 's/"//g' Project/.env
-                        
-                        # 2. SPRAWDZAMY PARAMETR Z GUI JENKINSA:
-                        # Sprawdzamy, czy użytkownik wpisał coś w pole CUSTOM_PRODUCT_ID
-                        if [ ! -z "${CUSTOM_PRODUCT_ID}" ]; then
-                            echo "Wykryto ręczne nadpisanie z GUI: ${CUSTOM_PRODUCT_ID}"
+                    // Przekazujemy parametr bezpośrednio jako zmienną środowiskową dla powłoki Bash
+                    withEnv(["CENEO_PRODUCT_ID=${params.CENEO_PRODUCT_ID}"]) {
+                        sh '''
+                            # 1. Kopiujemy domyślny plik .env
+                            cp "$ENV_FILE_PATH" Project/.env
+                            sed -i 's/\r//g' Project/.env
+                            sed -i 's/"//g' Project/.env
                             
-                            # Usuwamy starą zmienną (np. PRODUCT_ID), jeśli istniała w pliku .env
-                            sed -i '/^PRODUCT_ID=/d' Project/.env
-                            
-                            # Dopisujemy nową wartość podaną przez Ciebie w GUI
-                            echo "PRODUCT_ID=${CUSTOM_PRODUCT_ID}" >> Project/.env
-                            echo "Pomyślnie nadpisano PRODUCT_ID wartością z GUI."
-                        else
-                            echo "Pole GUI puste. Używam domyślnej konfiguracji z pliku .env."
-                        fi
+                            # 2. SPRAWDZAMY PARAMETR Z GUI JENKINSA:
+                            if [ ! -z "$CENEO_PRODUCT_ID" ]; then
+                                echo "Wykryto ręczne nadpisanie z GUI: $CENEO_PRODUCT_ID"
+                                
+                                # Usuwamy starą zmienną z pliku .env, jeśli istniała
+                                sed -i '/^CENEO_PRODUCT_ID=/d' Project/.env
+                                
+                                # Dopisujemy nową wartość podaną przez Ciebie w GUI
+                                echo "CENEO_PRODUCT_ID=$CENEO_PRODUCT_ID" >> Project/.env
+                                echo "Pomyślnie nadpisano CENEO_PRODUCT_ID wartością z GUI."
+                            else
+                                echo "Pole GUI puste. Używam domyślnej konfiguracji z pliku .env."
+                            fi
 
-                        echo "Plik .env został poprawnie zaimportowany i przygotowany."
-                    '''
+                            echo "Plik .env został poprawnie zaimportowany i przygotowany."
+                        '''
+                    }
                 }
             }
         }
