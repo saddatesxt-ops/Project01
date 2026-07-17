@@ -8,10 +8,7 @@ import copy
 import itertools
 from dotenv import load_dotenv
 
-import torch
-import spacy
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-
+# Ładowanie zmiennych z .env PRZED importem torch i transformers
 load_dotenv()
 
 # ==============================================================================
@@ -28,19 +25,19 @@ EMOTION_LIST_RAW = os.environ.get("ENCODER_MODEL_EMOTION_LIST", "FacebookAI/xlm-
 MODEL_SENTIMENT_VERSIONS = [m.strip() for m in SENTIMENT_LIST_RAW.split(",") if m.strip()]
 MODEL_EMOTION_VERSIONS = [m.strip() for m in EMOTION_LIST_RAW.split(",") if m.strip()]
 
-MODELS_CACHE_DIR = os.environ.get("SYSTEM_MODELS_CACHE_DIR", "models")
+# Skrypt korzysta teraz bezpośrednio ze zunifikowanej zmiennej HF_HOME
+MODELS_CACHE_DIR = os.environ.get("HF_HOME", "models")
 os.makedirs(MODELS_CACHE_DIR, exist_ok=True)
 # ==============================================================================
 
-# ==============================================================================
-# GŁÓWNY SKRYPT
-# ==============================================================================
-
+import torch
+import spacy
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+from transformers.utils import is_offline_mode
 
 # Funkcja pomocnicza tekstowa: Dzieli ciągły tekst opinii na pojedyncze zdania przy użyciu tokenizatora NLTK dla języka polskiego.
 def split_into_sentences(text):
     return nltk.sent_tokenize(text, language='polish')
-
 
 # Funkcja pomocnicza heurystyczna: Sprawdza za pomocą wyrażeń regularnych, czy opinia jest pustym, powtarzalnym szablonem i od razu klasyfikuje jej podstawowy sentyment.
 def is_empty_template_review(text):
@@ -59,7 +56,6 @@ def is_empty_template_review(text):
         return True, "negatywny"
     return False, None
 
-
 # Funkcja mapowania: Standaryzuje etykiety gwiazdkowe, numeryczne lub tekstowe z modeli klasyfikacji sentymentu do wspólnego formatu.
 def map_sentiment_label(label):
     lbl = str(label).lower()
@@ -72,7 +68,6 @@ def map_sentiment_label(label):
     if "neu" in lbl or "neutral" in lbl: return "neutralny"
     
     return "neutralny"
-
 
 # Funkcja mapowania: Konwertuje wielojęzyczne oraz wieloklasowe etykiety modeli detekcji emocji na uogólnione kategorie taksonomii Ekmana.
 def map_emotion_label(label):
@@ -113,7 +108,6 @@ def map_emotion_label(label):
 
     return "brak"
 
-
 # Funkcja ekstrakcji: Wyciąga unikalne aspekty rzeczownikowe z tekstu za pomocą analizy składniowej i lematyzacji silnika spaCy.
 def extract_aspects_from_sentence(nlp_engine, text):
     doc = nlp_engine(text)
@@ -126,24 +120,20 @@ def extract_aspects_from_sentence(nlp_engine, text):
                     aspects.append(lemma)
     return aspects
 
-
-# Funkcja ładowania modeli: Zarządza lokalną pamięcią podręczną modeli (cache) Hugging Face, ładując model offline lub pobierając je w razie potrzeby.
+# Zoptymalizowana funkcja ładowania modeli oparta o natywny mechanizm HF offline
 def load_local_or_remote_pipeline(task, model_name, cache_dir, device):
-    local_path = os.path.join(cache_dir, model_name)
-    
-    if os.path.exists(local_path) and os.listdir(local_path):
-        logging.info(f" -> [OFFLINE] Ładowanie modelu z dysku: {local_path}")
-        tokenizer = AutoTokenizer.from_pretrained(local_path, local_files_only=True)
-        model = AutoModelForSequenceClassification.from_pretrained(local_path, local_files_only=True)
+    if os.environ.get("HF_HUB_OFFLINE") == "1" or is_offline_mode():
+        logging.info(f" -> [OFFLINE] Ładowanie modelu z lokalnego cache: {model_name}")
+        tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir, local_files_only=True)
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, cache_dir=cache_dir, local_files_only=True)
         return pipeline(task, model=model, tokenizer=tokenizer, device=device)
     else:
-        logging.warning(f" -> [ONLINE] Brak modelu lokalnie. Pobieranie {model_name} do cache...")
+        logging.warning(f" -> [ONLINE] Tryb sieciowy aktywowany. Pobieranie/Sprawdzanie {model_name}...")
         tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
         model = AutoModelForSequenceClassification.from_pretrained(model_name, cache_dir=cache_dir)
         return pipeline(task, model=model, tokenizer=tokenizer, device=device)
 
-
-# Główna funkcja orkiestratora: Inicjalizuje procesy, buduje macierz kombinacji modeli, wykonuje analizy i zapisuje wyniki zbiorcze w formacie JSON.
+# Główna funkcja orkiestratora
 def analyze_reviews_encoder(product_id):
     os.makedirs(LOGS_DIR, exist_ok=True)
     log_file = os.path.join(LOGS_DIR, f"{product_id}.log")
@@ -156,11 +146,9 @@ def analyze_reviews_encoder(product_id):
 
     logging.info("=== URUCHOMIENIE SKRYPTU MACIERZY ENKODERÓW LOKALNYCH ===")
     
-    # --------------------------------------------------------------------------
-    # SEKCJA: INICJALIZACJA I BUDOWANIE MACIERZY (INITIALIZATION)
-    # --------------------------------------------------------------------------
     device = 0 if torch.cuda.is_available() else -1
     logging.info(f"Używane urządzenie obliczeniowe: {'GPU (CUDA)' if device == 0 else 'CPU'}")
+    logging.info(f"Status trybu HuggingFace Offline: {os.environ.get('HF_HUB_OFFLINE') == '1'}")
 
     model_pairs = list(itertools.product(MODEL_SENTIMENT_VERSIONS, MODEL_EMOTION_VERSIONS))
     logging.info(f"Wykryte modele sentymentu: {len(MODEL_SENTIMENT_VERSIONS)}")
@@ -193,9 +181,6 @@ def analyze_reviews_encoder(product_id):
     product_title = data.get("title", "Nieznany produkt")
     reviews = data.get("reviews", [])
     
-    # --------------------------------------------------------------------------
-    # SEKCJA: PRZYGOTOWANIE I FILTRACJA DANYCH (DATA PREPARATION)
-    # --------------------------------------------------------------------------
     template_results = {}
     reviews_to_analyze = []
 
@@ -220,11 +205,7 @@ def analyze_reviews_encoder(product_id):
     logging.info(f"Do przetworzenia przez NLP: {len(reviews_to_analyze)} opinii (odsiano {len(template_results)} szablonów).")
     
     all_analysis_results = []
-    # --------------------------------------------------------------------------
 
-    # --------------------------------------------------------------------------
-    # SEKCJA: WYKONYWANIE PROCESÓW ANALITYCZNYCH W PĘTLI MACIERZY (EXECUTION)
-    # --------------------------------------------------------------------------
     for p_idx, (current_sentiment_model, current_emotion_model) in enumerate(model_pairs):
         pair_name = f"sentiment:{current_sentiment_model} + emotion:{current_emotion_model}"
         logging.info(f"\n--- [PARA {p_idx + 1}/{len(model_pairs)}] Uruchamianie konfiguracji: {pair_name}")
@@ -323,7 +304,6 @@ def analyze_reviews_encoder(product_id):
         del emotion_pipeline
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-    # --------------------------------------------------------------------------
 
     final_json = {
         "input_file": input_filename,
@@ -340,7 +320,6 @@ def analyze_reviews_encoder(product_id):
         json.dump(final_json, f, ensure_ascii=False, indent=2)
         
     logging.info(f"\n=== PROCES MACIERZOWY ZAKOŃCZONY. Zbiorcze wyniki zapisano w: {output_path} ===")
-
 
 if __name__ == "__main__":
     if not PRODUCT_ID:
