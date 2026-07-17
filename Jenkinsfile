@@ -2,7 +2,8 @@ pipeline {
     agent {
         dockerfile {
             filename 'Dockerfile.agent'
-            args '--shm-size=2g -u 0 -v /var/data/huggingface_cache:/workspace/Project/models'
+            // Używamy ${WORKSPACE}, aby precyzyjnie wskazać katalog roboczy potoku wewnątrz agenta
+            args '--shm-size=2g -u 0 -v /var/data/huggingface_cache:${WORKSPACE}/Project/models'
         }
     }
 
@@ -18,7 +19,6 @@ pipeline {
         stage('Wstrzyknięcie konfiguracji .env z GUI') {
             steps {
                 withCredentials([file(credentialsId: 'moj-plik-env', variable: 'ENV_FILE_PATH')]) {
-                    // Przekazujemy parametr bezpośrednio jako zmienną środowiskową dla powłoki Bash
                     withEnv(["CENEO_PRODUCT_ID=${params.CENEO_PRODUCT_ID}"]) {
                         sh '''
                             # 1. Kopiujemy domyślny plik .env
@@ -29,11 +29,7 @@ pipeline {
                             # 2. SPRAWDZAMY PARAMETR Z GUI JENKINSA:
                             if [ ! -z "$CENEO_PRODUCT_ID" ]; then
                                 echo "Wykryto ręczne nadpisanie z GUI: $CENEO_PRODUCT_ID"
-                                
-                                # Usuwamy starą zmienną z pliku .env, jeśli istniała
                                 sed -i '/^CENEO_PRODUCT_ID=/d' Project/.env
-                                
-                                # Dopisujemy nową wartość podaną przez Ciebie w GUI
                                 echo "CENEO_PRODUCT_ID=$CENEO_PRODUCT_ID" >> Project/.env
                                 echo "Pomyślnie nadpisano CENEO_PRODUCT_ID wartością z GUI."
                             else
@@ -47,44 +43,10 @@ pipeline {
             }
         }
 
-        stage('Krok 1: Scraping') {
-            steps {
-                dir('Project') {
-                    sh 'python3 scrap_ceneo.py'
-                }
-            }
-        }
-
-        stage('Krok 2: Parsowanie HTML') {
-            steps {
-                dir('Project') {
-                    sh 'python3 parser_html_ceneo.py'
-                }
-            }
-        }
-
-        stage('Krok 3: Encoder') {
-            steps {
-                dir('Project') {
-                    sh 'python3 encoder_ceneo.py'
-                }
-            }
-        }
-
-        stage('Krok 4: Decoder') {
-            steps {
-                dir('Project') {
-                    sh 'python3 decoder_ceneo.py'
-                }
-            }
-        }
-
-        stage('Krok 5: Raport') {
-            steps {
-                dir('Project') {
-                    sh 'python3 generate_report_ceneo.py'
-                }
-            }
-        }
+        stage('Krok 1: Scraping') { steps { dir('Project') { sh 'python3 scrap_ceneo.py' } } }
+        stage('Krok 2: Parsowanie HTML') { steps { dir('Project') { sh 'python3 parser_html_ceneo.py' } } }
+        stage('Krok 3: Encoder') { steps { dir('Project') { sh 'python3 encoder_ceneo.py' } } }
+        stage('Krok 4: Decoder') { steps { dir('Project') { sh 'python3 decoder_ceneo.py' } } }
+        stage('Krok 5: Raport') { steps { dir('Project') { sh 'python3 generate_report_ceneo.py' } } }
     }
 }
