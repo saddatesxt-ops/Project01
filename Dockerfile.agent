@@ -29,9 +29,7 @@ RUN pip install --no-cache-dir \
     seaborn \
     reportlab
 
-# 4. Pobieranie modeli i przeglądarek na stałe do wnętrza obrazu
+# 4. Pobieranie modeli bazowych i przeglądarek na stałe do wnętrza obrazu
 RUN playwright install chromium
 RUN python3 -m spacy download pl_core_news_md
 RUN python3 -c "import nltk; nltk.download('punkt_tab', quiet=True)"
-
-WORKDIR /workspace
