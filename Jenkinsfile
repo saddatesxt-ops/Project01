@@ -2,8 +2,7 @@ pipeline {
     agent {
         dockerfile {
             filename 'Dockerfile.agent'
-            // Używamy ${WORKSPACE}, aby precyzyjnie wskazać katalog roboczy potoku wewnątrz agenta
-            args '--shm-size=2g -u 0 -v /var/data/huggingface_cache:${WORKSPACE}/Project/models'
+            args '--shm-size=2g -u 0'
         }
     }
 
