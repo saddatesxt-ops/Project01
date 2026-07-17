@@ -59,6 +59,14 @@ echo "Nadaję uprawnienia do gniazda Dockera dla Jenkinsa..."
 sudo chmod 666 /var/run/docker.sock
 
 echo "============================================="
+echo "   KROK 4: Przygotowanie folderu na modele AI"
+echo "============================================="
+echo "Tworzenie katalogu na pamięć podręczną Hugging Face..."
+sudo mkdir -p /var/data/huggingface_cache
+sudo chmod 777 /var/data/huggingface_cache
+echo "[OK] Katalog /var/data/huggingface_cache jest gotowy."
+
+echo "============================================="
 echo "   PROCES INICJALIZACJI ZAKOŃCZONY SUKCESEM  "
 echo "============================================="
 echo "Jenkins jest uruchamiany. Poczekaj chwilę i wejdź na: http://<IP_SERWERA>:8080"

@@ -2,7 +2,8 @@ pipeline {
     agent {
         dockerfile {
             filename 'Dockerfile.agent'
-            args '--shm-size=2g -u 0'
+            // DODANO WOLUMEN MAPUJĄCY CACHE MODELI DO MASZYNY WIRTUALNEJ
+            args '--shm-size=2g -u 0 -v /var/data/huggingface_cache:/root/.cache/huggingface'
         }
     }
 
