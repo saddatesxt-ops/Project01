@@ -6,7 +6,7 @@ pipeline {
         }
     }
 
-    // DODAJEMY PARAMETR GUI: Pole tekstowe na ID produktu lub recenzję
+    //PARAMETR GUI: Pole tekstowe id_produktu do ręcznego wprowadzenia
     parameters {
         string(
             name: 'CUSTOM_PRODUCT_ID', 

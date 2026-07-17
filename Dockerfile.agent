@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 # 2. Aktualizacja pip
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# 3. Instalacja wszystkich ciężkich bibliotek (w tym torch)
+# 3. Instalacja bibliotek
 RUN pip install --no-cache-dir \
     playwright \
     beautifulsoup4 \
