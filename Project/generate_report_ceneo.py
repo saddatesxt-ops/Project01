@@ -284,7 +284,7 @@ def build_pdf_report(data, chart_paths, df_fr, df_sent, df_asp, product_id, targ
     story.append(Paragraph(f"<b>ID Produktu:</b> {product_id} | <b>Plik źródłowy:</b> analysis_review_{file_type}_{product_id}.json", meta_style))
     story.append(Spacer(1, 10))
 
-    story.append(Paragraph("1. Podsumowanie Wykonawcze (Executive Summary)", h2_style))
+    story.append(Paragraph("1. Podsumowanie Wykonawcze", h2_style))
     total_revs = len(df_fr['review_number'].unique()) if not df_fr.empty else 0
     summary_text = f"Niniejszy raport zawiera porównawczą analizę sentymentu, aspektów (ABSA) oraz emocji dla wybranego produktu (typ analizy: {file_type}). W procesie ewaluacji uwzględniono {total_revs} unikalnych opinii konsumenckich z platformy Ceneo."
     story.append(Paragraph(summary_text, body_style))
