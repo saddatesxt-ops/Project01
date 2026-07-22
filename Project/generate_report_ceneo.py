@@ -201,12 +201,20 @@ def generate_charts(data, target_dir, file_type):
     plt.close()
     chart_paths["sentence_sentiment"] = p2
 
-    # 3. WYKRES: Profil Emocjonalny
+    # 3. WYKRES: Profil Emocjonalny (Z POPRAWKĄ DLA MAPOWANIA I FILTROWANIA EMOCJI)
     fig, ax = plt.subplots(figsize=(10, 4.5))
+    
+    # Akceptowane emocje źródłowe (uwzględnia synonim 'gniew')
+    accepted_emotions = ["radość", "smutek", "strach", "złość", "gniew", "zaskoczenie", "wstręt"]
+    # Docelowa osiowa taksonomia Ekmana
     ekman_emotions = ["radość", "smutek", "strach", "złość", "zaskoczenie", "wstręt"]
     
     if not df_fr.empty and "emotion" in df_fr.columns:
-        df_fr_filtered = df_fr[df_fr["emotion"].isin(ekman_emotions)]
+        # 1. Filtrowanie akceptowanych wartości
+        df_fr_filtered = df_fr[df_fr["emotion"].isin(accepted_emotions)].copy()
+        # 2. Mapowanie 'gniew' na 'złość' dla zachowania spójności
+        df_fr_filtered["emotion"] = df_fr_filtered["emotion"].replace({"gniew": "złość"})
+        
         sns.countplot(data=df_fr_filtered, y="emotion", hue="model", order=ekman_emotions, ax=ax)
         plt.title("Profil Emocjonalny Produktu (Taksonomia Ekmana)", pad=12)
         plt.xlabel("Liczba Wykryć")
@@ -242,7 +250,7 @@ def generate_charts(data, target_dir, file_type):
     return chart_paths, df_fr, df_sent, df_asp
 
 
-# Funkcja pomocnicza konfiguracyjna: Rejestruje czcionki systemowe TTF w ReportLab dla obsługi polskich znaków (w przypadku braku używa czcionki Helvetica).
+# Funkcja pomocnicza konfiguracyjna: Rejestruje czcionki systemowe TTF w ReportLab dla obsługi polskich znaków.
 def setup_pdf_fonts():
     possible_fonts = [
         ("Arial", "arial.ttf", "arialbd.ttf"),
@@ -259,7 +267,7 @@ def setup_pdf_fonts():
     return "Helvetica", "Helvetica-Bold"
 
 
-# Główna funkcja raportująca: Składa i kompiluje dokument PDF z tabelami statystycznymi oraz osadzonymi wykresami za pomocą ReportLab Platypus.
+# Główna funkcja raportująca: Składa i kompiluje dokument PDF z tabelami statystycznymi oraz osadzonymi wykresami.
 def build_pdf_report(data, chart_paths, df_fr, df_sent, df_asp, product_id, target_dir, file_type):
     pdf_path = os.path.join(target_dir, f"report_{file_type}_{product_id}.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=letter, leftMargin=35, rightMargin=35, topMargin=40, bottomMargin=40)
