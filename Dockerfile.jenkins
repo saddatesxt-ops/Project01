@@ -14,5 +14,5 @@ RUN apt-get update && \
 # Powrót do użytkownika jenkins
 USER jenkins
 
-# AUTOMATYZACJA: Instalacja wtyczki Docker Pipeline podczas budowania obrazu
+# Instalacja wtyczki Docker Pipeline do Jenkinsa
 RUN jenkins-plugin-cli --plugins docker-workflow
