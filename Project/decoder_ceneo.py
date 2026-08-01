@@ -167,7 +167,7 @@ def process_model_pipeline(model_name, platform, client, reviews_to_analyze, tem
                             ),
                         )
                         raw_response = response.text
-                    # ----------------------------------------------------------
+                   
                     
                     llm_res = json.loads(raw_response)
                     
@@ -267,7 +267,7 @@ def analyze_reviews(product_id):
             return
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
         logging.info(f"Aktywny model Gemini: {GEMINI_MODEL_NAME}")
-    # --------------------------------------------------------------------------
+    
 
     try:
         nltk.data.find('tokenizers/punkt_tab')
@@ -328,7 +328,7 @@ def analyze_reviews(product_id):
         res = process_model_pipeline(GEMINI_MODEL_NAME, "GEMINI", gemini_client, reviews_to_analyze, template_results, product_title)
         all_models_analysis_results.append(res)
         time.sleep(4.0)
-    # --------------------------------------------------------------------------
+    
 
     final_json = {
         "input_file": input_filename,
