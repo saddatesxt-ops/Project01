@@ -33,7 +33,7 @@ USER_AGENT = os.environ.get("SYSTEM_USER_AGENT")
 # ==============================================================================
 
 
-# Funkcja scrape_ceneo() pobiera opinie o produkcie i zapisuje je do plików HTML.
+# Funkcja pobiera opinie o produkcie i zapisuje je do plików HTML.
 def scrape_ceneo(product_id):
     
     # Tworzenie katalogu na logi jeśli nie istnieje (pobrane z .env)
