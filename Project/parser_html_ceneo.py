@@ -15,6 +15,9 @@ PRODUCT_ID = os.environ.get("CENEO_PRODUCT_ID")
 REVIEWS_DIR = os.environ.get("SYSTEM_REVIEWS_DIR")
 LOGS_DIR = os.environ.get("SYSTEM_LOGS_DIR")
 
+# ==============================================================================
+# GŁÓWNY SKRYPT
+# ==============================================================================
 
 # Funkcja pomocnicza/konfiguracyjna: Inicjalizuje system logowania i tworzy plik logu dla danego produktu.
 def setup_logging(product_id, logs_dir):
