@@ -27,11 +27,15 @@ MODEL_EMOTION_VERSIONS = [m.strip() for m in EMOTION_LIST_RAW.split(",") if m.st
 
 MODELS_CACHE_DIR = os.environ.get("HF_HOME", "models")
 os.makedirs(MODELS_CACHE_DIR, exist_ok=True)
-# ==============================================================================
 
 import torch
 import spacy
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+
+# ==============================================================================
+# GŁÓWNY SKRYPT
+# ==============================================================================
+
 
 # Funkcja pomocnicza tekstowa: Dzieli ciągły tekst opinii na pojedyncze zdania przy użyciu tokenizatora NLTK dla języka polskiego.
 def split_into_sentences(text):
@@ -118,7 +122,7 @@ def extract_aspects_from_sentence(nlp_engine, text):
                     aspects.append(lemma)
     return aspects
 
-# Zoptymalizowana funkcja ładowania modeli oparta o weryfikację istnienia katalogu w wolumenie
+# funkcja ładowania modeli oparta o weryfikację istnienia katalogu w wolumenie
 def load_local_or_remote_pipeline(task, model_name, cache_dir, device):
     # Hugging Face automatycznie zamienia ukośniki na podwójne myślniki w nazwie folderu cache
     hf_folder_format = f"models--{model_name.replace('/', '--')}"
