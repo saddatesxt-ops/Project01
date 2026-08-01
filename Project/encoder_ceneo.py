@@ -25,7 +25,6 @@ EMOTION_LIST_RAW = os.environ.get("ENCODER_MODEL_EMOTION_LIST", "FacebookAI/xlm-
 MODEL_SENTIMENT_VERSIONS = [m.strip() for m in SENTIMENT_LIST_RAW.split(",") if m.strip()]
 MODEL_EMOTION_VERSIONS = [m.strip() for m in EMOTION_LIST_RAW.split(",") if m.strip()]
 
-# Skrypt korzysta teraz bezpośrednio ze zunifikowanej zmiennej HF_HOME
 MODELS_CACHE_DIR = os.environ.get("HF_HOME", "models")
 os.makedirs(MODELS_CACHE_DIR, exist_ok=True)
 # ==============================================================================
