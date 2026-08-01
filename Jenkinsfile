@@ -10,7 +10,7 @@ pipeline {
         string(
             name: 'CENEO_PRODUCT_ID', 
             defaultValue: '', 
-            description: 'Wpisz ręcznie ID produktu, aby nadpisać wartość z pliku .env. Zostaw puste, aby użyć domyślnej.'
+            description: 'Wpisz ręcznie ID produktu, aby nadpisać wartość z pliku .env. Zostaw puste, aby użyć domyślnej wartości.'
         )
     }
     
