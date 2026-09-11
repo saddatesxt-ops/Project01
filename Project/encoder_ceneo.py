@@ -33,15 +33,46 @@ import spacy
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 
 # ==============================================================================
-# GŁÓWNY SKRYPT
+# UNIWERSALNA EKSTRAKCJA ASPEKTÓW (GENERIC ABSA)
 # ==============================================================================
 
+def extract_aspects_generic(nlp_engine, text):
+    """
+    Uniwersalna ekstrakcja aspektów niewymagająca sztywnej taksonomii.
+    Identyfikuje kluczowe obiekty opinii (rzeczowniki i frazy rzeczownikowe)
+    niezależnie od typu sprzętu (AGD, RTV, Audio, Laptopy itp.).
+    """
+    doc = nlp_engine(text)
+    aspects = []
 
-# Funkcja pomocnicza tekstowa: Dzieli ciągły tekst opinii na pojedyncze zdania przy użyciu tokenizatora NLTK dla języka polskiego.
+    # 1. Ekstrakcja zaimków i rzeczowników pełniących funkcje składniowe (podmiot/dopełnienie)
+    for token in doc:
+        if token.pos_ in ("NOUN", "PROPN") and not token.is_stop and len(token.text) > 2:
+            # Pomiń bezwzględne ogólne słowa
+            if token.lemma_.lower() in ["ocena", "zakup", "produkt", "sprzęt", "dostawa", "sklep", "gwiazdka"]:
+                continue
+            
+            lemma = token.lemma_.lower()
+            if lemma not in aspects:
+                aspects.append(lemma)
+
+    # 2. Wykrywanie złożonych fraz rzeczownikowych (np. "jakość dźwięku", "czas pracy")
+    for chunk in doc.noun_chunks:
+        chunk_text = chunk.text.lower().strip()
+        # Zachowujemy krótki dwu-trzy wyrazowy zwrot
+        if len(chunk_text.split()) in [2, 3] and not any(w in chunk_text for w in ["bardzo", "bardzo dobrze"]):
+            if chunk_text not in aspects:
+                aspects.append(chunk_text)
+
+    return aspects
+
+# ==============================================================================
+# POMOCNICZE FUNKCJE MAPUJĄCE I PRZETWARZAJĄCE
+# ==============================================================================
+
 def split_into_sentences(text):
     return nltk.sent_tokenize(text, language='polish')
 
-# Funkcja pomocnicza heurystyczna: Sprawdza za pomocą wyrażeń regularnych, czy opinia jest pustym, powtarzalnym szablonem i od razu klasyfikuje jej podstawowy sentyment.
 def is_empty_template_review(text):
     txt = text.strip().lower()
     positive_patterns = [
@@ -58,20 +89,18 @@ def is_empty_template_review(text):
         return True, "negatywny"
     return False, None
 
-# Funkcja mapowania: Standaryzuje etykiety gwiazdkowe, numeryczne lub tekstowe z modeli klasyfikacji sentymentu do wspólnego formatu.
 def map_sentiment_label(label):
     lbl = str(label).lower()
     if "5 star" in lbl or "4 star" in lbl: return "pozytywny"
     if "3 star" in lbl: return "neutralny"
     if "2 star" in lbl or "1 star" in lbl: return "negatywny"
     
-    if "pos" in lbl or "positive" in lbl or "prawdopodobieństwo sukcesu" in lbl: return "pozytywny"
+    if "pos" in lbl or "positive" in lbl: return "pozytywny"
     if "neg" in lbl or "negative" in lbl: return "negatywny"
     if "neu" in lbl or "neutral" in lbl: return "neutralny"
     
     return "neutralny"
 
-# Funkcja mapowania: Konwertuje wielojęzyczne oraz wieloklasowe etykiety modeli detekcji emocji na uogólnione kategorie taksonomii Ekmana.
 def map_emotion_label(label):
     lbl = str(label).strip().lower()
     
@@ -110,37 +139,25 @@ def map_emotion_label(label):
 
     return "brak"
 
-# Funkcja ekstrakcji: Wyciąga unikalne aspekty rzeczownikowe z tekstu za pomocą analizy składniowej i lematyzacji silnika spaCy.
-def extract_aspects_from_sentence(nlp_engine, text):
-    doc = nlp_engine(text)
-    aspects = []
-    for token in doc:
-        if token.pos_ in ("NOUN", "PROPN"):
-            if not token.is_stop and len(token.text) > 2:
-                lemma = token.lemma_.lower()
-                if lemma not in aspects:
-                    aspects.append(lemma)
-    return aspects
-
-# funkcja ładowania modeli oparta o weryfikację istnienia katalogu w wolumenie
 def load_local_or_remote_pipeline(task, model_name, cache_dir, device):
-    # Hugging Face automatycznie zamienia ukośniki na podwójne myślniki w nazwie folderu cache
     hf_folder_format = f"models--{model_name.replace('/', '--')}"
     expected_local_path = os.path.join(cache_dir, hf_folder_format)
     
-    # Sprawdzamy, czy ten konkretny model został już pobrany do wolumenu
     if os.path.exists(expected_local_path):
-        logging.info(f" -> [LOKALNY CACHE] Znaleziono model na dysku. Ładowanie bez odpytywania sieci: {model_name}")
+        logging.info(f" -> [LOKALNY CACHE] Ładowanie z dysku: {model_name}")
         tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_name, cache_dir=cache_dir, local_files_only=True)
         return pipeline(task, model=model, tokenizer=tokenizer, device=device)
     else:
-        logging.warning(f" -> [PIERWSZE URUCHOMIENIE] Brak modelu na dysku. Pobieranie z Hugging Face: {model_name}...")
+        logging.warning(f" -> [POBIERANIE HF] Pobieranie: {model_name}...")
         tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
         model = AutoModelForSequenceClassification.from_pretrained(model_name, cache_dir=cache_dir)
         return pipeline(task, model=model, tokenizer=tokenizer, device=device)
 
-# Główna funkcja orkiestratora
+# ==============================================================================
+# GŁÓWNA PETLA PRZETWARZANIA
+# ==============================================================================
+
 def analyze_reviews_encoder(product_id):
     os.makedirs(LOGS_DIR, exist_ok=True)
     log_file = os.path.join(LOGS_DIR, f"{product_id}.log")
@@ -151,16 +168,13 @@ def analyze_reviews_encoder(product_id):
         handlers=[logging.FileHandler(log_file, encoding='utf-8'), logging.StreamHandler()]
     )
 
-    logging.info("=== URUCHOMIENIE SKRYPTU MACIERZY ENKODERÓW LOKALNYCH ===")
+    logging.info("=== URUCHOMIENIE UNIWERSALNEGO SKRYPTU MACIERZY ENKODERÓW ===")
     
     device = 0 if torch.cuda.is_available() else -1
     logging.info(f"Używane urządzenie obliczeniowe: {'GPU (CUDA)' if device == 0 else 'CPU'}")
 
     model_pairs = list(itertools.product(MODEL_SENTIMENT_VERSIONS, MODEL_EMOTION_VERSIONS))
-    logging.info(f"Wykryte modele sentymentu: {len(MODEL_SENTIMENT_VERSIONS)}")
-    logging.info(f"Wykryte modele emocji: {len(MODEL_EMOTION_VERSIONS)}")
-    logging.info(f"Łączna liczba par do przetestowania (Matrix): {len(model_pairs)}")
-
+    
     try:
         logging.info(f"Ładowanie silnika językowego spaCy: {SPACY_MODEL_NAME}...")
         nlp_engine = spacy.load(SPACY_MODEL_NAME)
@@ -208,8 +222,6 @@ def analyze_reviews_encoder(product_id):
                 "sentences": split_into_sentences(rev_content)
             })
 
-    logging.info(f"Do przetworzenia przez NLP: {len(reviews_to_analyze)} opinii (odsiano {len(template_results)} szablonów).")
-    
     all_analysis_results = []
 
     for p_idx, (current_sentiment_model, current_emotion_model) in enumerate(model_pairs):
@@ -226,7 +238,7 @@ def analyze_reviews_encoder(product_id):
                 cache_dir=MODELS_CACHE_DIR, device=device
             )
         except Exception as pair_init_err:
-            logging.error(f"Pominięcie pary z powodu błędu ładowania: {pair_init_err}")
+            logging.error(f"Pominięcie pary z powodu błędu: {pair_init_err}")
             continue
 
         model_reviews_map = {k: copy.deepcopy(v) for k, v in template_results.items()}
@@ -243,9 +255,10 @@ def analyze_reviews_encoder(product_id):
                 
                 full_sentiment = map_sentiment_label(raw_sent_res['label'])
                 full_emotion = map_emotion_label(raw_emo_res['label'])
-                full_aspects = extract_aspects_from_sentence(nlp_engine, r_content)
                 
                 processed_sentences = []
+                aggregated_aspects = []
+                
                 for s_idx, s_text in enumerate(r_sentences):
                     if not s_text.strip():
                         continue
@@ -255,7 +268,14 @@ def analyze_reviews_encoder(product_id):
                     
                     s_sentiment = map_sentiment_label(s_sent_res['label'])
                     s_emotion = map_emotion_label(s_emo_res['label'])
-                    s_aspects = extract_aspects_from_sentence(nlp_engine, s_text)
+                    
+                    # Uniwersalna ekstrakcja aspektów
+                    s_aspects = extract_aspects_generic(nlp_engine, s_text)
+                    
+                    # Agregacja do poziomu pełnej opinii
+                    for asp in s_aspects:
+                        if asp not in aggregated_aspects:
+                            aggregated_aspects.append(asp)
                     
                     processed_sentences.append({
                         "sentence_number": s_idx + 1,
@@ -271,30 +291,21 @@ def analyze_reviews_encoder(product_id):
                         "text": r_content,
                         "sentiment": full_sentiment,
                         "emotion": full_emotion,
-                        "aspects": full_aspects
+                        "aspects": aggregated_aspects
                     },
                     "sentences": processed_sentences
                 }
                 
             except Exception as proc_err:
-                logging.error(f"Błąd przetwarzania opinii ID {r_num} dla obecnej pary: {proc_err}")
-                model_reviews_map[r_num] = {
-                    "review_number": r_num,
-                    "full_review": {"text": r_content, "sentiment": "neutralny", "emotion": "brak", "aspects": []},
-                    "sentences": []
-                }
+                logging.error(f"Błąd przetwarzania opinii ID {r_num}: {proc_err}")
 
         sorted_results = [model_reviews_map[k] for k in sorted(model_reviews_map.keys())]
         
-        pos_count = neg_count = neu_count = 0
-        for res in sorted_results:
-            sentiment = str(res.get("full_review", {}).get("sentiment", "")).lower()
-            if "pozytywny" in sentiment: pos_count += 1
-            elif "negatywny" in sentiment: neg_count += 1
-            elif "neutralny" in sentiment: neu_count += 1
+        pos_count = sum(1 for res in sorted_results if "pozytywny" in str(res.get("full_review", {}).get("sentiment", "")).lower())
+        neg_count = sum(1 for res in sorted_results if "negatywny" in str(res.get("full_review", {}).get("sentiment", "")).lower())
+        neu_count = sum(1 for res in sorted_results if "neutralny" in str(res.get("full_review", {}).get("sentiment", "")).lower())
             
         execution_time = round(time.time() - pair_start_time, 2)
-        logging.info(f" -> Zakończono. Czas: {execution_time}s | P: {pos_count}, N: {neu_count}, Neg: {neg_count}")
 
         all_analysis_results.append({
             "model_name": pair_name,
@@ -324,13 +335,7 @@ def analyze_reviews_encoder(product_id):
     
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(final_json, f, ensure_ascii=False, indent=2)
-        
-    logging.info(f"\n=== PROCES MACIERZOWY ZAKOŃCZONY. Zbiorcze wyniki zapisano w: {output_path} ===")
 
 if __name__ == "__main__":
-    if not PRODUCT_ID:
-        print("BŁĄD: Brak zdefiniowanego CENEO_PRODUCT_ID w pliku .env!")
-    elif not MODEL_SENTIMENT_VERSIONS or not MODEL_EMOTION_VERSIONS:
-        print("BŁĄD: Listy modeli w pliku .env są puste!")
-    else:
+    if PRODUCT_ID:
         analyze_reviews_encoder(PRODUCT_ID)
