@@ -33,36 +33,45 @@ import spacy
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 
 # ==============================================================================
-# UNIWERSALNA EKSTRAKCJA ASPEKTÓW (GENERIC ABSA)
+# UNIWERSALNA EKSTRAKCJA ASPEKTÓW (GENERIC ABSA DLA JĘZYKA POLSKIEGO)
 # ==============================================================================
 
 def extract_aspects_generic(nlp_engine, text):
     """
-    Uniwersalna ekstrakcja aspektów niewymagająca sztywnej taksonomii.
-    Identyfikuje kluczowe obiekty opinii (rzeczowniki i frazy rzeczownikowe)
-    niezależnie od typu sprzętu (AGD, RTV, Audio, Laptopy itp.).
+    Uniwersalna ekstrakcja aspektów dla języka polskiego (bez doc.noun_chunks).
+    Identyfikuje kluczowe obiekty opinii (rzeczowniki oraz złożone frazy rzeczownikowe i przymiotnikowe)
+    za pomocą analizy składniowej (dependency parsing), niezależnie od kategroii sprzętu.
     """
     doc = nlp_engine(text)
     aspects = []
 
-    # 1. Ekstrakcja zaimków i rzeczowników pełniących funkcje składniowe (podmiot/dopełnienie)
+    # Czarna lista ogólnych słów niebędących cechami/aspektami sprzętu
+    STOP_ASPECTS = {
+        "ocena", "zakup", "produkt", "sprzęt", "dostawa", "sklep", "gwiazdka",
+        "złotych", "złoty", "zł", "raz", "dzień", "tydzień", "miesiąc", "rok", "złotówka"
+    }
+
+    # 1. Ekstrakcja pojedynczych rzeczowników (NOUN / PROPN)
     for token in doc:
         if token.pos_ in ("NOUN", "PROPN") and not token.is_stop and len(token.text) > 2:
-            # Pomiń bezwzględne ogólne słowa
-            if token.lemma_.lower() in ["ocena", "zakup", "produkt", "sprzęt", "dostawa", "sklep", "gwiazdka"]:
-                continue
-            
             lemma = token.lemma_.lower()
-            if lemma not in aspects:
+            if lemma not in STOP_ASPECTS and lemma not in aspects:
                 aspects.append(lemma)
 
-    # 2. Wykrywanie złożonych fraz rzeczownikowych (np. "jakość dźwięku", "czas pracy")
-    for chunk in doc.noun_chunks:
-        chunk_text = chunk.text.lower().strip()
-        # Zachowujemy krótki dwu-trzy wyrazowy zwrot
-        if len(chunk_text.split()) in [2, 3] and not any(w in chunk_text for w in ["bardzo", "bardzo dobrze"]):
-            if chunk_text not in aspects:
-                aspects.append(chunk_text)
+            # 2. Ekstrakcja złożonych fraz (np. "jakość wykonania", "czas pracy", "dobry silnik")
+            # Przeglądamy poddrzewo relacji gramatycznych tokena (modyfikatory nmod, amod, flat)
+            for child in token.children:
+                # Frazy: Rzeczownik + Rzeczownik w dopełniaczu (np. jakość -> wykonania, czas -> pracy)
+                if child.dep_ in ("nmod", "flat") and child.pos_ in ("NOUN", "PROPN"):
+                    compound_phrase = f"{lemma} {child.lemma_.lower()}"
+                    if compound_phrase not in aspects:
+                        aspects.append(compound_phrase)
+                
+                # Frazy: Przymiotnik + Rzeczownik (np. cichy -> silnik, świetny -> dźwięk)
+                elif child.dep_ == "amod" and child.pos_ == "ADJ" and not child.is_stop:
+                    adj_noun_phrase = f"{child.lemma_.lower()} {lemma}"
+                    if adj_noun_phrase not in aspects:
+                        aspects.append(adj_noun_phrase)
 
     return aspects
 
@@ -155,7 +164,7 @@ def load_local_or_remote_pipeline(task, model_name, cache_dir, device):
         return pipeline(task, model=model, tokenizer=tokenizer, device=device)
 
 # ==============================================================================
-# GŁÓWNA PETLA PRZETWARZANIA
+# GŁÓWNA PĘTLA PRZETWARZANIA
 # ==============================================================================
 
 def analyze_reviews_encoder(product_id):
